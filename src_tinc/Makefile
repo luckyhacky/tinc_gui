@@ -5,7 +5,7 @@
 PKG_ANDROIDNDK_SRC	= "http://dl.google.com/android/ndk/android-ndk-r9d-linux-x86.tar.bz2"
 PKG_ANDROIDNDK_CHECKSUM	= "10feefd8c1ba950a177ce7a165a12d3b89d9822f"
 PKG_OPENSSL_SRC		= "http://www.openssl.org/source/openssl-1.0.0l.tar.gz"
-PKG_OPENSSL_CHECKSUM	= "f7aeaa76a043ab9c1cd5899d09c696d98278e2d7"
+PKG_OPENSSL_CHECKSUM	= "75a435eff22c4c58857f511cc03392a8a867cd8e"
 PKG_TINC_SRC		= "http://tinc-vpn.org/git/tinc"
 
 REQUIREMENTS := autoconf automake bash openssl tar wget
@@ -22,6 +22,10 @@ CHECK_REQUIREMENT = if [ ! $(shell which $(1)) ]; then echo required program $(1
 
 # clean logfile
 $(shell rm -f $(PWD)/log/build.log)
+
+# setting ARCH
+ARCH ?= "ARM"
+
 
 all: prerequisite sdk openssl tinc
 
@@ -41,9 +45,23 @@ openssl-build:
 	@tar xfz $(PWD)/tmp/$(OPENSSL_FILE) -C $(PWD)/tmp/
 	
 	@echo "OPENSSL: compiling"
-	@cd tmp/$(OPENSSL_DIR) && \
-	./Configure dist >> $(PWD)/log/build.log && \
-	make CC=$(PWD)/toolchain/bin/arm-linux-androideabi-gcc AR="$(PWD)/toolchain/bin/arm-linux-androideabi-ar r" RANLIB=$(PWD)/toolchain/bin/arm-linux-androideabi-ranlib &>> $(PWD)/log/build.log
+	@if [ $(ARCH) == "ARM" ] ; then \
+		cd tmp/$(OPENSSL_DIR) && \
+		make clean \
+		./Configure dist >> $(PWD)/log/build.log && \
+		make CC=$(PWD)/toolchain/bin/arm-linux-androideabi-gcc AR="$(PWD)/toolchain/bin/arm-linux-androideabi-ar r" RANLIB=$(PWD)/toolchain/bin/arm-linux-androideabi-ranlib &>> $(PWD)/log/build.log ; \
+	elif [ $(ARCH) == "MIPS" ] ; then \
+		cd tmp/$(OPENSSL_DIR) && \
+		make clean \
+		./Configure dist >> $(PWD)/log/build.log && \
+		make CC=$(PWD)/toolchain/bin/mipsel-linux-android-gcc  AR="$(PWD)/toolchain/bin/mipsel-linux-android-ar r"  RANLIB=$(PWD)/toolchain/bin/mipsel-linux-android-ranlib  &>> $(PWD)/log/build.log ; \
+	elif [ $(ARCH) == "X86" ] ; then \
+		cd tmp/$(OPENSSL_DIR) && \
+		make clean \
+		./Configure dist >> $(PWD)/log/build.log && \
+		make CC=$(PWD)/toolchain/bin/i686-linux-android-gcc    AR="$(PWD)/toolchain/bin/i686-linux-android-ar r"    RANLIB=$(PWD)/toolchain/bin/i686-linux-android-ranlib    &>> $(PWD)/log/build.log ; \
+	fi;
+	
 
 openssl-download:
 	@if [ -e "$(PWD)/tmp/$(OPENSSL_FILE)" ] ; then \
@@ -52,7 +70,7 @@ openssl-download:
 		echo "OPENSSL: downloading source files" ; \
 		wget $(PKG_OPENSSL_SRC) -P $(PWD)/tmp/ ; \
 	fi;
-	
+
 	@if [ $(PKG_OPENSSL_CHECKSUM) == "`$(call PKG_CHECKSUM,$(OPENSSL_FILE))`" ] ; then \
 		echo "OPENSSL: checksum ok" ; \
 	else \
@@ -72,10 +90,22 @@ sdk-build:
 		echo "Android NDK: extracting ... this may take some time" ; \
 		tar xfj $(PWD)/tmp/$(ANDROIDNDK_FILE) -C $(PWD)/tmp/ ; \
 		echo "Android NDK: installing toolchain to $(PWD)/toolchain" ; \
-		$(PWD)/tmp/$(ANDROIDNDK_DIR)/build/tools/make-standalone-toolchain.sh --platform=android-5 --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		if [ $(ARCH) == "ARM" ] ; then \
+			$(PWD)/tmp/$(ANDROIDNDK_DIR)/build/tools/make-standalone-toolchain.sh --platform=android-5 --arch=arm  --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		elif [ $(ARCH) == "MIPS" ] ; then \
+			$(PWD)/tmp/$(ANDROIDNDK_DIR)/build/tools/make-standalone-toolchain.sh --platform=android-9 --arch=mips --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		elif [ $(ARCH) == "X86" ] ; then \
+			$(PWD)/tmp/$(ANDROIDNDK_DIR)/build/tools/make-standalone-toolchain.sh --platform=android-9 --arch=x86 --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		fi; \
 	else \
 		echo "Android NDK: using exising under $(ANDROID_NDK)" ; \
-		$(ANDROID_NDK)/build/tools/make-standalone-toolchain.sh --platform=android-5 --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		if [ $(ARCH) == "ARM" ] ; then \
+			$(ANDROID_NDK)/build/tools/make-standalone-toolchain.sh --platform=android-5 --arch=arm  --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		elif [ $(ARCH) == "MIPS" ] ; then \
+			$(ANDROID_NDK)/build/tools/make-standalone-toolchain.sh --platform=android-9 --arch=mips --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		elif [ $(ARCH) == "X86" ] ; then \
+			$(ANDROID_NDK)/build/tools/make-standalone-toolchain.sh --platform=android-9 --arch=x86 --install-dir=$(PWD)/toolchain >> $(PWD)/log/build.log ; \
+		fi; \
 	fi;
 
 sdk-download:
@@ -108,13 +138,14 @@ tinc-build:
 	@cd tinc && autoreconf -fsi &>> $(PWD)/log/build.log
 	
 	@echo "TINC: building tinc ... this may take some time"
-	@cd tinc && \
-	CC=$(PWD)/toolchain/bin/arm-linux-androideabi-gcc ./configure \
-	--host=arm-linux \
-	--disable-lzo \
-	--with-openssl-lib=$(PWD)/tmp/$(OPENSSL_DIR) \
-	--with-openssl-include=$(PWD)/tmp/$(OPENSSL_DIR)/include/ &>> $(PWD)/log/build.log && \
-	make >> $(PWD)/log/build.log
+	
+	@if [ $(ARCH) == "ARM" ] ; then \
+		cd tinc && CC=$(PWD)/toolchain/bin/arm-linux-androideabi-gcc ./configure --host=arm-linux --disable-lzo --with-openssl-lib=$(PWD)/tmp/$(OPENSSL_DIR) --with-openssl-include=$(PWD)/tmp/$(OPENSSL_DIR)/include/ &>> $(PWD)/log/build.log && make >> $(PWD)/log/build.log ; \
+	elif [ $(ARCH) == "MIPS" ] ; then \
+		cd tinc && CC=$(PWD)/toolchain/bin/mipsel-linux-android-gcc  ./configure --host=mips-linux --disable-lzo --with-openssl-lib=$(PWD)/tmp/$(OPENSSL_DIR) --with-openssl-include=$(PWD)/tmp/$(OPENSSL_DIR)/include/ &>> $(PWD)/log/build.log && make >> $(PWD)/log/build.log ; \
+	elif [ $(ARCH) == "X86" ] ; then \
+		cd tinc && CC=$(PWD)/toolchain/bin/i686-linux-android-gcc    ./configure --host=i686-linux --disable-lzo --with-openssl-lib=$(PWD)/tmp/$(OPENSSL_DIR) --with-openssl-include=$(PWD)/tmp/$(OPENSSL_DIR)/include/ &>> $(PWD)/log/build.log && make >> $(PWD)/log/build.log ; \
+	fi;
 
 	@if [ -f $(PWD)/tinc/src/tincd ] ; then \
 		echo "TINC: tincd can be found in tinc/src/tincd"; \
@@ -136,7 +167,13 @@ tinc-version:
 
 install:
 	@if [ -f $(PWD)/tinc/src/tincd ] ; then \
-		cp $(PWD)/tinc/src/tincd $(PWD)/../res/raw/tincd ; \
+		if [ $(ARCH) == "ARM" ] ; then \
+			cp $(PWD)/tinc/src/tincd $(PWD)/../res/raw/tincd.armeabi ; \
+		elif [ $(ARCH) == "MIPS" ] ; then \
+			cp $(PWD)/tinc/src/tincd $(PWD)/../res/raw/tincd.mips ; \
+		elif [ $(ARCH) == "X86" ] ; then \
+			cp $(PWD)/tinc/src/tincd $(PWD)/../res/raw/tincd.x86 ; \
+		fi;\
 	else \
 		echo "tincd binary not found - please run 'make' before 'make install'" ;\
 	fi;
@@ -151,7 +188,14 @@ prerequisite:
 	@if [ ! -d "$(PWD)/log/" ] ; then \
 		mkdir -p $(PWD)/log/ ; \
 	fi
-	
+
 	@if [ ! -d "$(PWD)/log/build.log" ] ; then \
 		touch $(PWD)/log/build.log ; \
 	fi
+
+	@if [ $(ARCH) == "ARM" ] || [ $(ARCH) == "MIPS" ] || [ $(ARCH) == "X86" ] ; then \
+		echo 'compiling for: $(ARCH)'; \
+	else \
+		echo 'unknown arch $(ARCH) - currently supported: ARM / MIPS / X86'; \
+		exit 1; \
+	fi;
