@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <link href='https://fonts.googleapis.com/css?family=Chivo:900' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/pygment_trac.css" media="screen" />
+    <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print" />
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <title>Tinc GUI by Vilbrekin</title>
+  </head>
+
+  <body>
+    <div id="container">
+      <div class="inner">
+
+        <header>
+          <h1>Tinc GUI</h1>
+          <h2>Android port of tinc VPN with basic GUI</h2>
+        </header>
+
+        <section id="downloads" class="clearfix">
+          <a href="https://github.com/Vilbrekin/tinc_gui/zipball/master" id="download-zip" class="button"><span>Download .zip</span></a>
+          <a href="https://github.com/Vilbrekin/tinc_gui/tarball/master" id="download-tar-gz" class="button"><span>Download .tar.gz</span></a>
+          <a href="https://github.com/Vilbrekin/tinc_gui" id="view-on-github" class="button"><span>View on GitHub</span></a>
+        </section>
+
+        <hr>
+
+        <section id="main_content">
+          <h2>Welcome to Tinc GUI for Android home page.</h2>
+
+<p>Tinc is an open source peer to peer VPN daemon. Find more information at <a href="http://www.tinc-vpn.org">http://www.tinc-vpn.org</a>.</p>
+
+<p>Tinc GUI for Android is a <a href="https://github.com/Vilbrekin/tinc">(slightly modified)</a> cross-compiled version of tincd for Arm, associated with a basic GUI for daemon management.</p>
+
+<h2>Where to get it?</h2>
+
+<p>Preferred way to get Tinc GUI is via <a href="https://play.google.com/store/apps/details?id=org.poirsouille.tinc_gui">Google Play</a>.</p>
+<p>You may also get directly the APK for manual installation:<br/><a href="https://github.com/Vilbrekin/tinc_gui/releases/latest">Latest Tinc GUI version</a> (historical versions are <a href="https://github.com/Vilbrekin/tinc_gui/releases">available on GitHub</a>)</p>
+
+<h2>How does it work?</h2>
+
+<p>As this is a simple GUI around the original tincd daemon, please refer to the <a href="http://www.tinc-vpn.org/documentation/tinc_4.html#Configuration">official documentation</a> for the configuration.</p>
+
+<p>The easiest solution is to build your configuration and store it on your external SD card.
+Because Android devices usually mount it with noexec flag, a new option has been added to tinc's configuration file, in order to specify the script interpreter to use for configuration scripts (instead of having them executable):</p>
+
+<pre><code># Use sh to execute all configuration scripts
+ScriptsInterpreter = /system/bin/sh
+</code></pre>
+
+<h2>FAQ</h2>
+
+<h3>Why does this application need SuperUser rights?</h3>
+
+<p>It doesn't really need them by itself (there's an option to disable it).
+However tincd daemon will most probably need super user rights to work properly: access to TUN/TAP device is usually restricted to root.</p>
+
+<h3>Do you have any configuration example?</h3>
+
+<p>
+    The configuration follows <a href="http://www.tinc-vpn.org/documentation/tinc_4.html#Configuration-files">standard tinc's one</a>. For an easier start, here's mine.
+    <br/>
+    It uses switch mode on CM 10.1 (thus TUN device is /dev/tun), and routes all the traffic through the VPN (using host-up file).
+</p>
+
+<p>tinc.conf</p>
+<pre><code>Name = android
+AddressFamily = ipv4
+ConnectTo = another_peer
+Device = /dev/tun
+DeviceType = tap
+Mode = switch
+KeyExpire = 3600
+Interface = tap0
+PrivateKeyFile = /sdcard/tinc/vpn/rsa_key.priv
+ScriptsInterpreter = /system/bin/sh</code></pre>
+
+<p>tinc-up</p>
+<pre><code>#!/system/bin/sh
+ifconfig $INTERFACE 10.0.0.130
+echo 1 &gt; /proc/sys/net/ipv4/conf/$INTERFACE/rp_filter</code></pre>
+
+<p>hosts/another_peer</p>
+<pre><code>Address = another_peer.org
+Subnet = 10.0.0.0/24
+
+-----BEGIN RSA PUBLIC KEY-----
+...
+-----END RSA PUBLIC KEY-----
+</code></pre>
+
+<p>hosts/another_peer-up</p>
+<pre><code>#!/system/bin/sh 
+echo $REMOTEADDRESS
+echo $INTERFACE 
+VPN_GATEWAY=10.0.0.254
+ORIGINAL_GATEWAY=`ip route show | grep ^default | cut -d ' ' -f 2-5`
+
+ip route add $REMOTEADDRESS $ORIGINAL_GATEWAY 
+ip route add $VPN_GATEWAY dev $INTERFACE 
+ip route add 0.0.0.0/1 via $VPN_GATEWAY dev $INTERFACE 
+ip route add 128.0.0.0/1 via $VPN_GATEWAY dev $INTERFACE</code></pre>
+
+<p>hosts/another_peer-down</p>
+<pre><code>#!/system/bin/sh
+VPN_GATEWAY=10.0.0.254
+ORIGINAL_GATEWAY=`ip route show | grep ^default | cut -d ' ' -f 2-5`
+
+ip route del $REMOTEADDRESS $ORIGINAL_GATEWAY 
+ip route del $VPN_GATEWAY dev $INTERFACE 
+ip route del 0.0.0.0/1 via $VPN_GATEWAY dev $INTERFACE 
+ip route del 128.0.0.0/1 via $VPN_GATEWAY dev $INTERFACE</code></pre>
+
+<h3>I'm getting "/dev/net/tun not found" error when starting tinc</h3>
+
+<p>Depending on your ROM, the path to TUN/TAP device might be different. Use the Device directive in tinc.conf to specify the correct one (eg. "Device = /dev/tun for CM ROMs).</p>
+
+<h3>I'm getting "Reading RSA private key file `xxx' failed" error when starting tinc</h3>
+
+<p>This happens when the private key can't be read for some reason. Regenerate it and copy it to the device properly.</p>
+
+<h3>What are the supported CPU architectures?</h3>
+
+<p>ARM and x86 only for the time being.</p>
+
+<h3>Is it working?</h3>
+
+<p>Used to work very well on my SGS2 i9100, under CyanogenMod 9. Now running on Nexus 4 and Oneplus One with CM 11 (Android 4.4.4) without a glitch.
+Waiting for more feedback.</p>
+
+<h3>Is it possible to start/stop the service from other applications (such as tasker)?</h3>
+
+<p>Yes, since version 0.9.9. This can be done using the custom actions of TincdService.<br/>
+Package: org.poirsouille.tinc_gui<br/>
+Class: org.poirsouille.tinc_gui.TincdService<br/>
+Actions: org.poirsouille.tinc_gui.TincdService.START / org.poirsouille.tinc_gui.TincdService.STOP
+</p>
+<p>You may test this functionality using ADB to send the intents:</p>
+<pre>
+adb shell am startservice -a org.poirsouille.tinc_gui.TincdService.START org.poirsouille.tinc_gui/.TincdService
+adb shell am startservice -a org.poirsouille.tinc_gui.TincdService.STOP org.poirsouille.tinc_gui/.TincdService
+</pre>
+
+<h3>Is it free?</h3>
+
+<p>Yes, it's even released under GPLv3. <a href="https://github.com/Vilbrekin/tinc_gui">Source code is available on GitHub</a>.
+However if you like this application and want to support it, you might <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&amp;hosted_button_id=L8H64G57CZRZA">donate to the author</a>. </p>
+<p>I also gladly accept bitcoins (1GnaV352mdeo5wSMtB2mCcoe2MB4WEqjnJ) and litecoins (LfQx5F9zhvjvjRE5H87BsBqWbRr2BrY3W8).</p>
+        </section>
+
+        <footer>
+          Tinc GUI is maintained by <a href="https://github.com/Vilbrekin">Vilbrekin</a><br>
+          This page was generated by <a href="http://pages.github.com">GitHub Pages</a>. Tactile theme by <a href="http://twitter.com/jasonlong">Jason Long</a>.
+        </footer>
+
+                  <script type="text/javascript">
+            var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+            document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+          </script>
+          <script type="text/javascript">
+            try {
+              var pageTracker = _gat._getTracker("UA-2950664-5");
+            pageTracker._trackPageview();
+            } catch(err) {}
+          </script>
+
+      </div>
+    </div>
+  </body>
+</html>
